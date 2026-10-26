@@ -7,8 +7,14 @@ and Platega's `POST /transaction/process`, `GET /transaction/{id}` and the statu
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/YOUR_USER/YOUR_REPO)
 Replace `YOUR_USER/YOUR_REPO` (repo must be public). Fill in the form, deploy, then do steps 2-4.
 
-Manual alternative: `npm install`, `npx wrangler deploy`, then `npx wrangler secret put` for
-`PLATEGA_MERCHANT_ID`, `PLATEGA_SECRET`, `SELLAUTH_API_KEY`, `SELLAUTH_SHOP_ID`.
+**If the form does not ask for the keys:** Cloudflare builds the form from `.dev.vars.example` in the repo root.
+That file starts with a dot, so it is hidden in Explorer/Finder and is easy to miss when uploading to GitHub.
+Check that it is in the repo (and not empty). Either way you can always add the keys afterwards:
+Worker > Settings > Variables and Secrets > Add > type **Secret** (`PLATEGA_MERCHANT_ID`, `PLATEGA_SECRET`,
+`SELLAUTH_API_KEY`, `SELLAUTH_SHOP_ID`). Open `https://<your-worker>.workers.dev/` : it lists any missing names.
+
+Manual alternative: `npm install`, `npx wrangler deploy`, then `npm run secrets` (asks for each of
+`PLATEGA_MERCHANT_ID`, `PLATEGA_SECRET`, `SELLAUTH_API_KEY`, `SELLAUTH_SHOP_ID`).
 
 ## 1. Settings (`wrangler.toml` > `[vars]`)
 | Var | Meaning |

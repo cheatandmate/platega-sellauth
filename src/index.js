@@ -96,11 +96,23 @@ async function platega(env, method, path, body) {
 
 // Callback authenticity: Platega sends your MerchantId and API key as headers.
 export function verifyCallback(env, request) {
-  return (
-    safeEqual(request.headers.get("X-MerchantId") ?? "", env.PLATEGA_MERCHANT_ID ?? "") &&
-    safeEqual(request.headers.get("X-Secret") ?? "", env.PLATEGA_SECRET ?? "")
-  );
+  const id = request.headers.get("X-MerchantId");
+  const secret = request.headers.get("X-Secret");
+  // Never authorize when either side is empty (an unset secret must not match a missing header).
+  if (!id || !secret || !env.PLATEGA_MERCHANT_ID || !env.PLATEGA_SECRET) return false;
+  return safeEqual(id, env.PLATEGA_MERCHANT_ID) && safeEqual(secret, env.PLATEGA_SECRET);
 }
+
+/* ------------------------- Configuration self-check ------------------------ */
+
+const REQUIRED = ["PLATEGA_MERCHANT_ID", "PLATEGA_SECRET", "SELLAUTH_API_KEY", "SELLAUTH_SHOP_ID"];
+// Names only, never values. Template placeholders ("your-...") count as missing.
+export function missingConfig(env) {
+  const m = REQUIRED.filter((k) => !env[k] || /^your-/i.test(String(env[k]).trim()));
+  if (!env.STATE) m.push("STATE (KV binding)");
+  return m;
+}
+const shopUrlIsPlaceholder = (env) => !env.SELLAUTH_SHOP_URL || /YOURSHOP/i.test(env.SELLAUTH_SHOP_URL);
 
 /* ----------------------------- SellAuth ----------------------------- */
 
@@ -249,8 +261,18 @@ async function handleCallback(env, request) {
 export default {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
-    if (request.method === "GET" && pathname === "/") return text("Platega x SellAuth bridge is running.");
+    if (request.method === "GET" && pathname === "/") {
+      const missing = missingConfig(env);
+      if (missing.length) return text(`Platega x SellAuth bridge: setup incomplete.\nMissing: ${missing.join(", ")}\nAdd them in Cloudflare > Worker > Settings > Variables and Secrets (type: Secret).`, 503);
+      if (shopUrlIsPlaceholder(env)) return text("Platega x SellAuth bridge: running, but SELLAUTH_SHOP_URL is not set (edit wrangler.toml).");
+      return text("Platega x SellAuth bridge is running.");
+    }
+    if (request.method === "GET" && pathname === "/platega/callback") {
+      return text("Platega callback endpoint. Platega sends POST requests here; nothing to see in a browser.");
+    }
     if (request.method === "GET" && pathname === "/start") {
+      const missing = missingConfig(env);
+      if (missing.length) { console.log("Not configured. Missing:", missing.join(", ")); return text("Service is not configured yet.", 503); }
       try { return await handleStart(env, request); }
       catch (e) { console.log("start failed", String(e)); return text("Could not start payment.", 502); }
     }
@@ -259,6 +281,7 @@ export default {
   },
 
   async scheduled(_event, env, ctx) {
+    if (missingConfig(env).length) return;
     const list = await env.STATE.list({ prefix: "pending:", limit: 50 });
     for (const k of list.keys) {
       ctx.waitUntil(settle(env, k.name.slice("pending:".length)).catch((e) => console.log("cron settle failed", k.name, String(e))));

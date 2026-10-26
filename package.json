@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node test/worker.test.mjs"
+    "test": "node test/worker.test.mjs",
+    "secrets": "wrangler secret put PLATEGA_MERCHANT_ID && wrangler secret put PLATEGA_SECRET && wrangler secret put SELLAUTH_API_KEY && wrangler secret put SELLAUTH_SHOP_ID"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

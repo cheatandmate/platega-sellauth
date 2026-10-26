@@ -105,3 +105,21 @@ await start("invoice=7&ref=abc123"); txStatus = "CONFIRMED";
 const waits = []; await worker.scheduled({}, env, { waitUntil: (p) => waits.push(p) }); await Promise.all(waits);
 assert.equal(delivered(), 1);
 console.log("ok  cron delivers when callback was missed");
+
+// 10. configuration self-check and callback hardening
+const bare = { STATE: env.STATE };
+let rr = await worker.fetch(new Request("https://w.example/"), bare);
+assert.equal(rr.status, 503); const body0 = await rr.text();
+assert.ok(body0.includes("PLATEGA_SECRET") && body0.includes("SELLAUTH_API_KEY"));
+rr = await worker.fetch(new Request("https://w.example/start?invoice=7"), bare); assert.equal(rr.status, 503);
+// unset secrets must NOT match missing/empty headers
+for (const h of [{}, { "X-MerchantId": "", "X-Secret": "" }]) {
+  rr = await worker.fetch(new Request("https://w.example/platega/callback", { method: "POST", headers: h, body: "{}" }), bare);
+  assert.equal(rr.status, 401);
+}
+// template placeholders count as missing
+const ph = { ...env, PLATEGA_SECRET: "your-platega-api-key" };
+rr = await worker.fetch(new Request("https://w.example/"), ph); assert.equal(rr.status, 503);
+rr = await worker.fetch(new Request("https://w.example/platega/callback"), env); assert.equal(rr.status, 200); // browser GET
+rr = await worker.fetch(new Request("https://w.example/"), env); assert.equal(rr.status, 200);
+console.log("ok  setup self-check, empty-secret callback bypass closed, GET callback page");
