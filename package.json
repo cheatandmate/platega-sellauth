@@ -1,0 +1,39 @@
+{
+  "name": "platega-sellauth-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node test/worker.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "PLATEGA_MERCHANT_ID": {
+        "description": "Your Platega **MerchantId** (UUID). Find it in the Platega dashboard under **Settings**."
+      },
+      "PLATEGA_SECRET": {
+        "description": "Your Platega **API key** (`X-Secret`), from the same **Settings** page. Never share it."
+      },
+      "SELLAUTH_API_KEY": {
+        "description": "SellAuth API key from [Account > Developers](https://dash.sellauth.com/api). Scope it to your shop."
+      },
+      "SELLAUTH_SHOP_ID": {
+        "description": "Your numeric SellAuth shop ID (the number in API URLs like `/shops/1/`)."
+      },
+      "SELLAUTH_SHOP_URL": {
+        "description": "Your storefront URL, e.g. `https://yourshop.mysellauth.com`. Buyers are returned to `<url>/checkout/<ref>`."
+      },
+      "PLATEGA_PAYMENT_METHOD": {
+        "description": "Platega payment method number: 2 = SBP QR, 3 = ERIP, 11 = card acquiring, 12 = international, 13 = crypto, 14 = Sberpay. Must be enabled on your account."
+      },
+      "PLATEGA_MARKUP_PCT": {
+        "description": "Percent added on top of the converted RUB amount to cover rate changes, e.g. `2`. Use `0` for none."
+      }
+    }
+  }
+}

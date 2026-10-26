@@ -1,0 +1,19 @@
+name = "platega-sellauth"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Created automatically by the Deploy to Cloudflare button.
+[[kv_namespaces]]
+binding = "STATE"
+
+# Safety net: re-checks payments whose callback never arrived.
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+PLATEGA_BASE_URL = "https://app.platega.io"
+SELLAUTH_BASE_URL = "https://api.sellauth.com/v1"
+SELLAUTH_SHOP_URL = "https://YOURSHOP.mysellauth.com"   # buyers are sent back to <this>/checkout/<ref>
+PLATEGA_PAYMENT_METHOD = "2"                           # 2 SBP QR, 3 ERIP, 11 cards, 12 international, 13 crypto, 14 Sberpay
+PLATEGA_CURRENCY = "RUB"       # buyers are charged in this currency; other invoice currencies are converted to RUB (CBR rate)
+PLATEGA_MARKUP_PCT = "0"       # optional safety margin on converted amounts, e.g. "2" adds 2%
