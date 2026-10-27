@@ -1,54 +1,56 @@
-# Platega x SellAuth on Cloudflare Workers
+# PayCek x SellAuth on Cloudflare Workers
 
-Uses SellAuth's **Custom Payment Method > Redirect to URL** and `invoices/{id}/process?mark_as_paid=true`,
-and Platega's `POST /transaction/process`, `GET /transaction/{id}` and the status callback.
+Uses SellAuth's **Custom Payment Method > Redirect to URL** and `invoices/{id}/process?mark_as_paid=true`.
 
 ## 0. One-click deploy
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/YOUR_USER/YOUR_REPO)
-Replace `YOUR_USER/YOUR_REPO` (repo must be public). Fill in the form, deploy, then do steps 2-4.
+Replace `YOUR_USER/YOUR_REPO` with this repo's path (repo must be **public**). Cloudflare shows a form for every
+key below and creates the KV namespace for you. Then skip to step 2.
 
-**If the form does not ask for the keys:** Cloudflare builds the form from `.dev.vars.example` in the repo root.
-That file starts with a dot, so it is hidden in Explorer/Finder and is easy to miss when uploading to GitHub.
-Check that it is in the repo (and not empty). Either way you can always add the keys afterwards:
-Worker > Settings > Variables and Secrets > Add > type **Secret** (`PLATEGA_MERCHANT_ID`, `PLATEGA_SECRET`,
-`SELLAUTH_API_KEY`, `SELLAUTH_SHOP_ID`). Open `https://<your-worker>.workers.dev/` : it lists any missing names.
+## 1. Deploy manually (alternative)
+```bash
+npm install
+npx wrangler deploy --dry-run >/dev/null        # KV namespace STATE is auto-created on first deploy
+# edit SELLAUTH_SHOP_URL in wrangler.toml
+npx wrangler secret put PAYCEK_API_KEY        # PayCek > account settings
+npx wrangler secret put PAYCEK_API_SECRET
+npx wrangler secret put PAYCEK_PROFILE_CODE   # PayCek > profile settings (id). Use a TEST profile first.
+npx wrangler secret put SELLAUTH_API_KEY      # SellAuth > Account > Developers (scope to this shop)
+npx wrangler secret put SELLAUTH_SHOP_ID
+npm test && npx wrangler deploy
+```
 
-Manual alternative: `npm install`, `npx wrangler deploy`, then `npm run secrets` (asks for each of
-`PLATEGA_MERCHANT_ID`, `PLATEGA_SECRET`, `SELLAUTH_API_KEY`, `SELLAUTH_SHOP_ID`).
-
-## 1. Settings (`wrangler.toml` > `[vars]`)
-| Var | Meaning |
-|---|---|
-| `PLATEGA_PAYMENT_METHOD` | 2 SBP QR, 3 ERIP, 11 card acquiring, 12 international, 13 crypto, 14 Sberpay. Must be enabled on your Platega account |
-| `PLATEGA_CURRENCY` | Currency the buyer is charged in (default `RUB`). Invoices in other currencies (USD, EUR...) are converted to RUB at the Central Bank of Russia rate and rounded up to the next kopeck |
-| `PLATEGA_MARKUP_PCT` | Safety margin added to converted amounts, e.g. `2` = +2% (default `0`) |
-| `SELLAUTH_SHOP_URL` | Buyers return to `<this>/checkout/<ref>` |
-| `PLATEGA_BASE_URL`, `SELLAUTH_BASE_URL` | API bases (defaults are correct) |
-
-Conversion: rate source is `cbr-xml-daily.ru` (CBR), cached 1 h; if it is down a rate up to 24 h old is used,
-otherwise the payment is refused (never charged at face value). `GET /` shows a "running" page.
-
-## 2. Platega dashboard
-**Settings > Callback URLs**: `https://<your-worker>.workers.dev/platega/callback`
-(one URL for all events; Platega sends your MerchantId / API key as headers, the Worker checks them).
-
-## 3. SellAuth payment method
-Payment Methods > add **Redirect to URL** (plan must include custom payment methods):
+## 2. Add the payment method in SellAuth
+Dashboard > Payment Methods > add **Redirect to URL** (needs a plan with custom payment methods), Redirect URL:
 ```
 https://<your-worker>.workers.dev/start?invoice={id}&ref={unique_id}&amount={price}&currency={currency}&email={email}
 ```
 
-## 4. Check the invoice shape (once)
-The price and currency are read from the SellAuth API, NOT the URL (buyers can edit the URL).
-Field names in `INVOICE` (top of `src/index.js`) are assumptions:
+## 3. Check the invoice shape (once)
+The Worker reads the price from the SellAuth API, NOT from the URL, because the buyer can edit
+`amount=` in the URL. The field names in `INVOICE` (top of `src/index.js`) are assumptions:
 ```bash
 curl -s -H "Authorization: Bearer $SELLAUTH_API_KEY" \
   https://api.sellauth.com/v1/shops/$SHOP_ID/invoices/$INVOICE_ID | jq
 ```
-If something can't be read the Worker refuses to start a payment and `npx wrangler tail` prints the keys it saw.
+If the amount can't be read the Worker refuses to start a payment; `npx wrangler tail` prints the keys it saw.
 
-## Test checklist
-1. Cheap order > choose the method > you land on Platega's payment page.
-2. `curl -i -X POST https://<worker>/platega/callback` must return **401**.
-3. After paying, the invoice is delivered once; a Platega callback retry doesn't re-deliver.
-Note: a CHARGEBACKED status is only logged; it cannot undo a delivery.
+## Base URLs (settings in `wrangler.toml`)
+| Var | Default |
+|---|---|
+| `PAYCEK_BASE_URL` | `https://paycek.io/processing/api` |
+| `SELLAUTH_BASE_URL` | `https://api.sellauth.com/v1` |
+
+Your own Worker address is `https://<worker-name>.<your-subdomain>.workers.dev` (enable **workers.dev** under the Worker's
+Settings > Domains & Routes).
+
+## Routes
+| Route | Purpose |
+|---|---|
+| `GET /start?invoice=&ref=&...` | From SellAuth. Opens a PayCek payment, redirects the buyer |
+| `GET /paycek/status/<invoiceId>` | PayCek status callback. MAC-verified, 401 if invalid |
+
+## Test checklist (PayCek test profile)
+1. Place a cheap order, choose the PayCek method, confirm you land on PayCek checkout.
+2. `curl -i https://<worker>/paycek/status/1` must return **401** (PayCek tests this on every payment).
+3. After paying, the invoice should show completed/Manually Completed and the items delivered, once.
